@@ -28,6 +28,15 @@
           -ms-overflow-style: none;  /* IE and Edge */
           scrollbar-width: none;  /* Firefox */
       }
+      
+      /* Animation for Install Banner */
+      @keyframes slideUp {
+        from { transform: translateY(100%); }
+        to { transform: translateY(0); }
+      }
+      .animate-slide-up-banner {
+        animation: slideUp 0.5s ease-out forwards;
+      }
     </style>
   <script type="importmap">
 {
@@ -43,5 +52,14 @@
   <body class="bg-gray-100 text-gray-900 select-none">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(reg => console.log('SW registrado'))
+            .catch(err => console.log('Erro ao registrar SW:', err));
+        });
+      }
+    </script>
   </body>
 </html>

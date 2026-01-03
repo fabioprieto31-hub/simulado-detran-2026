@@ -25,12 +25,17 @@ const App: React.FC = () => {
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isIOS, setIsIOS] = useState(false);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
 
   // Check for PWA installability and Platform
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
+      // Show banner automatically when browser says app is installable
+      if (!localStorage.getItem('installBannerDismissed')) {
+        setShowInstallBanner(true);
+      }
     };
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -38,6 +43,12 @@ const App: React.FC = () => {
     // Simple iOS detection
     const isIosDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
     setIsIOS(isIosDevice);
+    
+    // For iOS, show banner if not in standalone mode
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
+    if (isIosDevice && !isStandalone && !localStorage.getItem('installBannerDismissed')) {
+      setShowInstallBanner(true);
+    }
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
@@ -80,8 +91,14 @@ const App: React.FC = () => {
       const { outcome } = await deferredPrompt.userChoice;
       if (outcome === 'accepted') {
         setDeferredPrompt(null);
+        setShowInstallBanner(false);
       }
     }
+  };
+
+  const dismissInstallBanner = () => {
+    setShowInstallBanner(false);
+    localStorage.setItem('installBannerDismissed', 'true');
   };
 
   // Logic to generate a weighted exam structure (Official Detran Mix)
@@ -265,7 +282,7 @@ const App: React.FC = () => {
   const isReviewMode = gameState.status === 'REVIEW';
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-100 font-sans">
+    <div className="min-h-screen flex flex-col bg-gray-100 font-sans pb-16">
       {/* Header */}
       <header className={`text-white p-4 shadow-md sticky top-0 z-10 transition-colors ${isReviewMode ? 'bg-yellow-600' : 'bg-blue-700'}`}>
         <div className="max-w-2xl mx-auto flex items-center justify-between">
@@ -361,22 +378,6 @@ const App: React.FC = () => {
                  </button>
                )}
                
-               {/* Install Button */}
-               {deferredPrompt && (
-                 <button 
-                   onClick={handleInstallClick}
-                   className="w-full bg-gray-800 hover:bg-gray-900 text-white font-semibold py-3 px-6 rounded-xl shadow transition-transform active:scale-95 flex items-center justify-center gap-2 text-sm"
-                 >
-                   <span>📲</span> INSTALAR APLICATIVO
-                 </button>
-               )}
-
-               {isIOS && !deferredPrompt && (
-                 <div className="text-xs text-gray-500 bg-white p-2 rounded-lg border border-gray-200">
-                   Para instalar no iPhone: Toque em <strong>Compartilhar</strong> e depois em <strong>Adicionar à Tela de Início</strong>.
-                 </div>
-               )}
-
                {aiError && <p className="text-red-500 text-xs mt-2">{aiError}</p>}
              </div>
            </div>
@@ -445,6 +446,42 @@ const App: React.FC = () => {
           />
         )}
       </main>
+
+      {/* INSTALL BANNER */}
+      {showInstallBanner && (
+         <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-[0_-4px_15px_rgba(0,0,0,0.15)] z-50 animate-slide-up-banner flex flex-col sm:flex-row items-center justify-between gap-4">
+           <div className="flex items-center gap-3 w-full sm:w-auto">
+              <div className="bg-blue-600 text-white p-3 rounded-xl shadow-sm shrink-0">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+              </div>
+              <div className="flex-grow">
+                <p className="font-bold text-gray-900 leading-tight">Instalar Aplicativo</p>
+                <p className="text-sm text-gray-600 leading-tight mt-0.5">
+                   {isIOS 
+                     ? "Toque em Compartilhar e 'Adicionar à Tela de Início'" 
+                     : "Acesse offline e tenha melhor desempenho."}
+                </p>
+              </div>
+           </div>
+           
+           <div className="flex gap-2 w-full sm:w-auto">
+             <button 
+               onClick={dismissInstallBanner}
+               className="flex-1 sm:flex-none px-4 py-2.5 text-gray-600 font-semibold hover:bg-gray-100 rounded-lg transition-colors text-sm"
+             >
+               Agora não
+             </button>
+             {!isIOS && deferredPrompt && (
+               <button 
+                 onClick={handleInstallClick}
+                 className="flex-1 sm:flex-none px-6 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 shadow-lg shadow-blue-600/30 transition-all active:scale-95 text-sm"
+               >
+                 Instalar Grátis
+               </button>
+             )}
+           </div>
+         </div>
+      )}
 
       <Footer />
     </div>
