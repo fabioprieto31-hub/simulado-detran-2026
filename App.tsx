@@ -288,8 +288,17 @@ const App: React.FC = () => {
         {/* IDLE SCREEN */}
         {gameState.status === 'IDLE' && (
            <div className="flex flex-col items-center justify-center py-10 text-center space-y-8 animate-fade-in w-full">
-             <div className="bg-white p-6 rounded-full shadow-lg mb-4">
-                <span className="text-6xl">🚦</span>
+             <div className="bg-white p-6 rounded-3xl shadow-xl mb-4 transform hover:scale-105 transition-transform duration-300">
+                <img 
+                  src="/logo192.png" 
+                  alt="Logo Simulado Detran" 
+                  className="w-32 h-32 object-contain"
+                  onError={(e) => {
+                    // Fallback to emoji if image fails to load
+                    e.currentTarget.style.display = 'none';
+                    e.currentTarget.parentElement!.innerHTML = '<span class="text-6xl">🚦</span>';
+                  }}
+                />
              </div>
              <div>
                <h2 className="text-2xl font-bold text-gray-800 mb-2">Prepare-se para a prova!</h2>
