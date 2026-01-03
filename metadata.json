@@ -1,0 +1,5 @@
+{
+  "name": "Simulado Detran 2026",
+  "description": "Aplicativo de simulado para prova do Detran com banco de questões, resultados e compartilhamento via WhatsApp.",
+  "requestFramePermissions": []
+}
