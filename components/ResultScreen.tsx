@@ -4,10 +4,11 @@ import { QuizState } from '../types';
 interface ResultScreenProps {
   state: QuizState;
   onRestart: () => void;
+  onReview: () => void;
   totalQuestions: number;
 }
 
-const ResultScreen: React.FC<ResultScreenProps> = ({ state, onRestart, totalQuestions }) => {
+const ResultScreen: React.FC<ResultScreenProps> = ({ state, onRestart, onReview, totalQuestions }) => {
   // Calculate score derived from answers
   const calculatedScore = state.answers.reduce((acc, answer, index) => {
     const question = state.shuffledQuestions[index];
@@ -39,7 +40,7 @@ const ResultScreen: React.FC<ResultScreenProps> = ({ state, onRestart, totalQues
           Você acertou <span className="font-bold text-gray-900">{calculatedScore}</span> de <span className="font-bold text-gray-900">{totalQuestions}</span> questões.
         </p>
 
-        <div className="mb-8 p-4 rounded-lg bg-gray-50 border border-gray-200">
+        <div className="mb-6 p-4 rounded-lg bg-gray-50 border border-gray-200">
           {isPass ? (
             <div>
               <span className="text-4xl block mb-2">🏆</span>
@@ -54,6 +55,17 @@ const ResultScreen: React.FC<ResultScreenProps> = ({ state, onRestart, totalQues
             </div>
           )}
         </div>
+
+        <button
+          onClick={onReview}
+          className="w-full bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-3 px-4 rounded-lg mb-3 transition-colors shadow-sm flex items-center justify-center gap-2"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+          </svg>
+          Revisar Respostas
+        </button>
 
         <button
           onClick={handleShare}

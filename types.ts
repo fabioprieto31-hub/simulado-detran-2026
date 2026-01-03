@@ -8,7 +8,7 @@ export interface Question {
 }
 
 export interface QuizState {
-  status: 'IDLE' | 'PLAYING' | 'PAUSED_FOR_AD' | 'FINISHED' | 'LOADING_AI';
+  status: 'IDLE' | 'PLAYING' | 'PAUSED_FOR_AD' | 'FINISHED' | 'LOADING_AI' | 'REVIEW';
   currentQuestionIndex: number;
   answers: (number | null)[]; // Stores user answers
   shuffledQuestions: Question[];

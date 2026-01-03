@@ -11,6 +11,8 @@ import { generateQuestions } from './services/geminiService';
 const TOTAL_QUESTIONS_PER_ROUND = 30;
 // Show ad every X questions
 const AD_FREQUENCY = 5;
+// Official time limit in seconds (40 minutes)
+const GAME_DURATION = 40 * 60;
 
 const App: React.FC = () => {
   const [gameState, setGameState] = useState<QuizState>({
@@ -21,8 +23,38 @@ const App: React.FC = () => {
   });
 
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
-  const [showFeedback, setShowFeedback] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
+
+  // Timer Logic
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval>;
+
+    if (gameState.status === 'PLAYING') {
+      timer = setInterval(() => {
+        setTimeLeft((prev) => {
+          if (prev <= 1) {
+            // Time expired
+            clearInterval(timer);
+            setGameState(curr => ({ ...curr, status: 'FINISHED' }));
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [gameState.status]);
+
+  // Format seconds to MM:SS
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
 
   // Initialize Standard Game (Static Questions)
   const startStandardGame = useCallback(() => {
@@ -38,8 +70,8 @@ const App: React.FC = () => {
       shuffledQuestions: shuffled
     });
     setSelectedOption(null);
-    setShowFeedback(false);
     setAiError(null);
+    setTimeLeft(GAME_DURATION); // Reset timer
   }, []);
 
   // Initialize AI Game
@@ -57,7 +89,7 @@ const App: React.FC = () => {
         shuffledQuestions: newQuestions
       });
       setSelectedOption(null);
-      setShowFeedback(false);
+      setTimeLeft(GAME_DURATION); // Reset timer
     } catch (err) {
       setAiError("Não foi possível gerar questões com IA. Verifique sua chave API ou tente novamente.");
       setGameState(prev => ({ ...prev, status: 'IDLE' }));
@@ -65,14 +97,14 @@ const App: React.FC = () => {
   };
 
   const handleRestart = () => {
-    // Only ask for confirmation if actually playing. If finished, just exit.
+    // Confirmação apenas se o jogo estiver rolando (PLAYING)
     if (gameState.status === 'PLAYING') {
-      if (!window.confirm("Deseja realmente sair do simulado atual? Seu progresso será perdido.")) {
+      if (!window.confirm("Deseja fechar o simulado? Todo o progresso será perdido.")) {
          return;
       }
     }
     
-    // Complete reset of the state
+    // Complete reset of the state to Home
     setGameState({
       status: 'IDLE',
       currentQuestionIndex: 0,
@@ -80,17 +112,26 @@ const App: React.FC = () => {
       shuffledQuestions: []
     });
     setSelectedOption(null);
-    setShowFeedback(false);
     setAiError(null);
+    setTimeLeft(GAME_DURATION);
+  };
+
+  // Switch to Review Mode
+  const handleReview = () => {
+    setGameState(prev => ({
+      ...prev,
+      status: 'REVIEW',
+      currentQuestionIndex: 0
+    }));
+    // In review mode, we load the user's answer for the first question
+    const firstAnswer = gameState.answers[0];
+    setSelectedOption(firstAnswer !== undefined ? firstAnswer : null);
   };
 
   const handleOptionSelect = (index: number) => {
+    // Prevent changing answer if in Review mode
+    if (gameState.status === 'REVIEW') return;
     setSelectedOption(index);
-  };
-
-  const handleConfirmAnswer = () => {
-    if (selectedOption === null) return;
-    setShowFeedback(true);
   };
 
   const handlePreviousQuestion = () => {
@@ -104,17 +145,28 @@ const App: React.FC = () => {
 
       // Restore previous state
       const prevAnswer = gameState.answers[prevIndex];
-      if (prevAnswer !== undefined && prevAnswer !== null) {
-        setSelectedOption(prevAnswer);
-        setShowFeedback(true); // Always show feedback if going back to an answered question
-      } else {
-        setSelectedOption(null);
-        setShowFeedback(false);
-      }
+      setSelectedOption(prevAnswer !== undefined && prevAnswer !== null ? prevAnswer : null);
     }
   };
 
   const handleNextQuestion = () => {
+    const isReviewing = gameState.status === 'REVIEW';
+
+    // If reviewing, we just move forward without ad checks or saving answers
+    if (isReviewing) {
+       const nextIndex = gameState.currentQuestionIndex + 1;
+       if (nextIndex < gameState.shuffledQuestions.length) {
+         setGameState(prev => ({ ...prev, currentQuestionIndex: nextIndex }));
+         const nextAnswer = gameState.answers[nextIndex];
+         setSelectedOption(nextAnswer !== undefined ? nextAnswer : null);
+       } else {
+         // End of review, go back to results
+         setGameState(prev => ({ ...prev, status: 'FINISHED' }));
+       }
+       return;
+    }
+
+    // GAMEPLAY LOGIC (PLAYING)
     // Save the current answer into state
     const newAnswers = [...gameState.answers];
     newAnswers[gameState.currentQuestionIndex] = selectedOption;
@@ -122,9 +174,6 @@ const App: React.FC = () => {
     const nextIndex = gameState.currentQuestionIndex + 1;
     
     // Check for Ad Interruption
-    // Show ad if nextIndex is a multiple of AD_FREQUENCY, 
-    // AND we are effectively moving forward into a "checkpoint"
-    // We check if (nextIndex) % 5 == 0. 
     const shouldShowAd = nextIndex > 0 && nextIndex % AD_FREQUENCY === 0;
 
     // Check for End of Game
@@ -150,13 +199,10 @@ const App: React.FC = () => {
          }));
          
          // Setup UI for next question
-         // Check if we already have an answer for the next question (if user went back then fwd)
          if (newAnswers[nextIndex] !== undefined && newAnswers[nextIndex] !== null) {
            setSelectedOption(newAnswers[nextIndex]);
-           setShowFeedback(true);
          } else {
            setSelectedOption(null);
-           setShowFeedback(false);
          }
       }
     }
@@ -166,7 +212,6 @@ const App: React.FC = () => {
     // Resume game and move index forward
     const nextIndex = gameState.currentQuestionIndex + 1;
     
-    // Ensure we don't go out of bounds if ad happened at the very end (unlikely with current logic but safe)
     if (nextIndex >= gameState.shuffledQuestions.length) {
         setGameState(prev => ({ ...prev, status: 'FINISHED' }));
     } else {
@@ -178,48 +223,62 @@ const App: React.FC = () => {
         
         // Check if next was already answered
         const existingAnswer = gameState.answers[nextIndex];
-        if (existingAnswer !== undefined && existingAnswer !== null) {
-          setSelectedOption(existingAnswer);
-          setShowFeedback(true);
-        } else {
-          setSelectedOption(null);
-          setShowFeedback(false);
-        }
+        setSelectedOption(existingAnswer !== undefined && existingAnswer !== null ? existingAnswer : null);
     }
   };
+
+  const isReviewMode = gameState.status === 'REVIEW';
 
   // Render Logic
   return (
     <div className="min-h-screen flex flex-col bg-gray-100 font-sans">
       {/* Header */}
-      <header className="bg-blue-700 text-white p-4 shadow-md sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto flex justify-between items-center">
-          <div>
-             <h1 className="text-xl font-bold tracking-tight">Simulado Detran 2026</h1>
-             <p className="text-blue-200 text-xs">Prova Teórica</p>
+      <header className={`text-white p-4 shadow-md sticky top-0 z-10 transition-colors ${isReviewMode ? 'bg-yellow-600' : 'bg-blue-700'}`}>
+        <div className="max-w-2xl mx-auto flex items-center justify-between">
+          
+          {/* Left: Close Button */}
+          {(gameState.status === 'PLAYING' || gameState.status === 'FINISHED' || gameState.status === 'REVIEW') ? (
+            <button 
+              onClick={handleRestart}
+              className="p-2 rounded-full hover:bg-white/20 transition-colors mr-2"
+              title="Sair"
+            >
+              <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          ) : (
+            <div className="w-10"></div> 
+          )}
+
+          {/* Center: Title or Timer */}
+          <div className="flex-grow text-center">
+             {gameState.status === 'PLAYING' ? (
+               <div className={`text-xl font-mono font-bold tracking-wider ${timeLeft < 300 ? 'text-red-300 animate-pulse' : 'text-white'}`}>
+                 {formatTime(timeLeft)}
+               </div>
+             ) : gameState.status === 'REVIEW' ? (
+               <div className="text-xl font-bold tracking-tight">REVISÃO</div>
+             ) : (
+               <div>
+                 <h1 className="text-xl font-bold tracking-tight leading-none">Simulado Detran</h1>
+                 <p className="text-blue-200 text-xs">Prova Oficial 2026</p>
+               </div>
+             )}
           </div>
-          <div className="flex items-center gap-4">
-            {gameState.status === 'PLAYING' && (
-              <div className="text-right mr-2">
-                <p className="text-sm font-medium">
-                  {gameState.currentQuestionIndex + 1} / {gameState.shuffledQuestions.length}
+
+          {/* Right: Question Counter */}
+          <div className="w-10 text-right">
+            {(gameState.status === 'PLAYING' || gameState.status === 'REVIEW') && (
+              <div>
+                <p className="text-sm font-bold">
+                  {gameState.currentQuestionIndex + 1}
+                  <span className="opacity-70 font-normal text-xs">/{gameState.shuffledQuestions.length}</span>
                 </p>
-                <p className="text-xs text-blue-200">Questão</p>
               </div>
             )}
-            {/* Restart/Quit Button */}
-            {(gameState.status === 'PLAYING' || gameState.status === 'FINISHED') && (
-              <button 
-                onClick={handleRestart}
-                className="bg-blue-800 p-2 rounded-full hover:bg-blue-600 transition-colors"
-                title="Sair / Reiniciar"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            )}
           </div>
+
         </div>
       </header>
 
@@ -228,14 +287,17 @@ const App: React.FC = () => {
         
         {/* IDLE SCREEN */}
         {gameState.status === 'IDLE' && (
-           <div className="flex flex-col items-center justify-center py-10 text-center space-y-8 animate-fade-in">
+           <div className="flex flex-col items-center justify-center py-10 text-center space-y-8 animate-fade-in w-full">
              <div className="bg-white p-6 rounded-full shadow-lg mb-4">
                 <span className="text-6xl">🚦</span>
              </div>
              <div>
                <h2 className="text-2xl font-bold text-gray-800 mb-2">Prepare-se para a prova!</h2>
-               <p className="text-gray-600 max-w-xs mx-auto">
-                 Teste seus conhecimentos com questões variadas de um banco de 120 perguntas.
+               <p className="text-gray-600 max-w-xs mx-auto mb-2">
+                 Você terá <strong>40 minutos</strong> para responder <strong>30 questões</strong>.
+               </p>
+               <p className="text-sm text-gray-500">
+                 Acerto mínimo: 70% (21 questões).
                </p>
              </div>
 
@@ -244,7 +306,7 @@ const App: React.FC = () => {
                  onClick={startStandardGame}
                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-xl shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2"
                >
-                 <span>▶️</span> INICIAR SIMULADO
+                 <span>▶️</span> INICIAR PROVA
                </button>
                
                {process.env.API_KEY && (
@@ -268,14 +330,14 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* GAME SCREEN */}
-        {gameState.status === 'PLAYING' && (
+        {/* GAME SCREEN OR REVIEW SCREEN */}
+        {(gameState.status === 'PLAYING' || gameState.status === 'REVIEW') && (
           <div className="w-full flex flex-col items-center">
             <QuestionCard 
               question={gameState.shuffledQuestions[gameState.currentQuestionIndex]}
               selectedOption={selectedOption}
               onSelectOption={handleOptionSelect}
-              showFeedback={showFeedback}
+              showFeedback={gameState.status === 'REVIEW'}
             />
 
             <div className="w-full max-w-md mt-2 sticky bottom-4 flex gap-3">
@@ -293,26 +355,19 @@ const App: React.FC = () => {
                )}
 
               {/* Main Action Button */}
-              {!showFeedback ? (
-                <button
-                  onClick={handleConfirmAnswer}
-                  disabled={selectedOption === null}
-                  className={`flex-[2] py-4 rounded-xl font-bold shadow-lg transition-all ${
-                    selectedOption !== null 
-                      ? 'bg-blue-600 text-white hover:bg-blue-500' 
-                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  }`}
-                >
-                  CONFIRMAR
-                </button>
-              ) : (
-                <button
-                  onClick={handleNextQuestion}
-                  className="flex-[2] py-4 rounded-xl font-bold shadow-lg bg-green-600 text-white hover:bg-green-500 transition-all flex items-center justify-center gap-2"
-                >
-                  PRÓXIMA ➜
-                </button>
-              )}
+              <button
+                onClick={handleNextQuestion}
+                disabled={selectedOption === null && !isReviewMode} // Can click next in review mode even if null (unanswered)
+                className={`flex-[2] py-4 rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2 ${
+                  (selectedOption !== null || isReviewMode)
+                    ? isReviewMode ? 'bg-yellow-600 hover:bg-yellow-500 text-white' : 'bg-blue-600 text-white hover:bg-blue-500' 
+                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                }`}
+              >
+                {gameState.currentQuestionIndex === gameState.shuffledQuestions.length - 1 
+                  ? (isReviewMode ? 'VOLTAR AO RESULTADO' : 'FINALIZAR PROVA') 
+                  : 'PRÓXIMA ➜'}
+              </button>
             </div>
           </div>
         )}
@@ -327,6 +382,7 @@ const App: React.FC = () => {
           <ResultScreen 
             state={gameState} 
             onRestart={handleRestart} 
+            onReview={handleReview}
             totalQuestions={gameState.shuffledQuestions.length}
           />
         )}
