@@ -7,8 +7,6 @@ import ResultScreen from './components/ResultScreen';
 import Footer from './components/Footer';
 import { generateQuestions } from './services/geminiService';
 
-// How many questions per simulation?
-const TOTAL_QUESTIONS_PER_ROUND = 30;
 // Show ad every X questions
 const AD_FREQUENCY = 5;
 // Official time limit in seconds (40 minutes)
@@ -25,6 +23,26 @@ const App: React.FC = () => {
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isIOS, setIsIOS] = useState(false);
+
+  // Check for PWA installability and Platform
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    
+    // Simple iOS detection
+    const isIosDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+    setIsIOS(isIosDevice);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
 
   // Timer Logic
   useEffect(() => {
@@ -56,12 +74,46 @@ const App: React.FC = () => {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
-  // Initialize Standard Game (Static Questions)
+  const handleInstallClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setDeferredPrompt(null);
+      }
+    }
+  };
+
+  // Logic to generate a weighted exam structure (Official Detran Mix)
+  const getWeightedQuestions = useCallback(() => {
+    const shuffle = (array: Question[]) => [...array].sort(() => Math.random() - 0.5);
+
+    // Filter by categories
+    const pools = {
+      legislation: STATIC_QUESTIONS.filter(q => ['Legislação', 'Sinalização', 'Infrações'].includes(q.category || '')),
+      defensive: STATIC_QUESTIONS.filter(q => q.category === 'Direção Defensiva'),
+      firstAid: STATIC_QUESTIONS.filter(q => q.category === 'Primeiros Socorros'),
+      mechanics: STATIC_QUESTIONS.filter(q => q.category === 'Mecânica'),
+      environment: STATIC_QUESTIONS.filter(q => ['Meio Ambiente', 'Cidadania'].includes(q.category || ''))
+    };
+
+    // Select specific amounts to total 30 questions
+    // Legislação: 12, Direção Defensiva: 10, Primeiros Socorros: 3, Meio Ambiente: 3, Mecânica: 2
+    const selected = [
+      ...shuffle(pools.legislation).slice(0, 12),
+      ...shuffle(pools.defensive).slice(0, 10),
+      ...shuffle(pools.firstAid).slice(0, 3),
+      ...shuffle(pools.environment).slice(0, 3),
+      ...shuffle(pools.mechanics).slice(0, 2)
+    ];
+
+    // Final shuffle of the selected 30
+    return shuffle(selected);
+  }, []);
+
+  // Initialize Standard Game
   const startStandardGame = useCallback(() => {
-    // Shuffle the full bank and take the first N questions
-    const shuffled = [...STATIC_QUESTIONS]
-      .sort(() => Math.random() - 0.5)
-      .slice(0, TOTAL_QUESTIONS_PER_ROUND);
+    const shuffled = getWeightedQuestions();
 
     setGameState({
       status: 'PLAYING',
@@ -71,15 +123,15 @@ const App: React.FC = () => {
     });
     setSelectedOption(null);
     setAiError(null);
-    setTimeLeft(GAME_DURATION); // Reset timer
-  }, []);
+    setTimeLeft(GAME_DURATION); 
+  }, [getWeightedQuestions]);
 
   // Initialize AI Game
   const startAiGame = async () => {
     setGameState(prev => ({ ...prev, status: 'LOADING_AI' }));
     setAiError(null);
     try {
-      const newQuestions = await generateQuestions(10); // Generate 10 fresh questions
+      const newQuestions = await generateQuestions(10); 
       if (newQuestions.length === 0) throw new Error("No questions generated");
       
       setGameState({
@@ -89,7 +141,7 @@ const App: React.FC = () => {
         shuffledQuestions: newQuestions
       });
       setSelectedOption(null);
-      setTimeLeft(GAME_DURATION); // Reset timer
+      setTimeLeft(GAME_DURATION); 
     } catch (err) {
       setAiError("Não foi possível gerar questões com IA. Verifique sua chave API ou tente novamente.");
       setGameState(prev => ({ ...prev, status: 'IDLE' }));
@@ -97,14 +149,12 @@ const App: React.FC = () => {
   };
 
   const handleRestart = () => {
-    // Confirmação apenas se o jogo estiver rolando (PLAYING)
     if (gameState.status === 'PLAYING') {
       if (!window.confirm("Deseja fechar o simulado? Todo o progresso será perdido.")) {
          return;
       }
     }
     
-    // Complete reset of the state to Home
     setGameState({
       status: 'IDLE',
       currentQuestionIndex: 0,
@@ -116,20 +166,17 @@ const App: React.FC = () => {
     setTimeLeft(GAME_DURATION);
   };
 
-  // Switch to Review Mode
   const handleReview = () => {
     setGameState(prev => ({
       ...prev,
       status: 'REVIEW',
       currentQuestionIndex: 0
     }));
-    // In review mode, we load the user's answer for the first question
     const firstAnswer = gameState.answers[0];
     setSelectedOption(firstAnswer !== undefined ? firstAnswer : null);
   };
 
   const handleOptionSelect = (index: number) => {
-    // Prevent changing answer if in Review mode
     if (gameState.status === 'REVIEW') return;
     setSelectedOption(index);
   };
@@ -143,7 +190,6 @@ const App: React.FC = () => {
         currentQuestionIndex: prevIndex
       }));
 
-      // Restore previous state
       const prevAnswer = gameState.answers[prevIndex];
       setSelectedOption(prevAnswer !== undefined && prevAnswer !== null ? prevAnswer : null);
     }
@@ -152,7 +198,6 @@ const App: React.FC = () => {
   const handleNextQuestion = () => {
     const isReviewing = gameState.status === 'REVIEW';
 
-    // If reviewing, we just move forward without ad checks or saving answers
     if (isReviewing) {
        const nextIndex = gameState.currentQuestionIndex + 1;
        if (nextIndex < gameState.shuffledQuestions.length) {
@@ -160,23 +205,17 @@ const App: React.FC = () => {
          const nextAnswer = gameState.answers[nextIndex];
          setSelectedOption(nextAnswer !== undefined ? nextAnswer : null);
        } else {
-         // End of review, go back to results
          setGameState(prev => ({ ...prev, status: 'FINISHED' }));
        }
        return;
     }
 
-    // GAMEPLAY LOGIC (PLAYING)
-    // Save the current answer into state
     const newAnswers = [...gameState.answers];
     newAnswers[gameState.currentQuestionIndex] = selectedOption;
 
     const nextIndex = gameState.currentQuestionIndex + 1;
-    
-    // Check for Ad Interruption
     const shouldShowAd = nextIndex > 0 && nextIndex % AD_FREQUENCY === 0;
 
-    // Check for End of Game
     if (nextIndex >= gameState.shuffledQuestions.length) {
       setGameState(prev => ({
         ...prev,
@@ -184,7 +223,6 @@ const App: React.FC = () => {
         status: 'FINISHED'
       }));
     } else {
-      // Logic for moving to next question
       if (shouldShowAd) {
          setGameState(prev => ({
            ...prev,
@@ -198,7 +236,6 @@ const App: React.FC = () => {
            currentQuestionIndex: nextIndex
          }));
          
-         // Setup UI for next question
          if (newAnswers[nextIndex] !== undefined && newAnswers[nextIndex] !== null) {
            setSelectedOption(newAnswers[nextIndex]);
          } else {
@@ -209,7 +246,6 @@ const App: React.FC = () => {
   };
 
   const handleAdClosed = () => {
-    // Resume game and move index forward
     const nextIndex = gameState.currentQuestionIndex + 1;
     
     if (nextIndex >= gameState.shuffledQuestions.length) {
@@ -221,7 +257,6 @@ const App: React.FC = () => {
           currentQuestionIndex: nextIndex
         }));
         
-        // Check if next was already answered
         const existingAnswer = gameState.answers[nextIndex];
         setSelectedOption(existingAnswer !== undefined && existingAnswer !== null ? existingAnswer : null);
     }
@@ -229,14 +264,12 @@ const App: React.FC = () => {
 
   const isReviewMode = gameState.status === 'REVIEW';
 
-  // Render Logic
   return (
     <div className="min-h-screen flex flex-col bg-gray-100 font-sans">
       {/* Header */}
       <header className={`text-white p-4 shadow-md sticky top-0 z-10 transition-colors ${isReviewMode ? 'bg-yellow-600' : 'bg-blue-700'}`}>
         <div className="max-w-2xl mx-auto flex items-center justify-between">
           
-          {/* Left: Close Button */}
           {(gameState.status === 'PLAYING' || gameState.status === 'FINISHED' || gameState.status === 'REVIEW') ? (
             <button 
               onClick={handleRestart}
@@ -251,7 +284,6 @@ const App: React.FC = () => {
             <div className="w-10"></div> 
           )}
 
-          {/* Center: Title or Timer */}
           <div className="flex-grow text-center">
              {gameState.status === 'PLAYING' ? (
                <div className={`text-xl font-mono font-bold tracking-wider ${timeLeft < 300 ? 'text-red-300 animate-pulse' : 'text-white'}`}>
@@ -267,7 +299,6 @@ const App: React.FC = () => {
              )}
           </div>
 
-          {/* Right: Question Counter */}
           <div className="w-10 text-right">
             {(gameState.status === 'PLAYING' || gameState.status === 'REVIEW') && (
               <div>
@@ -287,14 +318,13 @@ const App: React.FC = () => {
         
         {/* IDLE SCREEN */}
         {gameState.status === 'IDLE' && (
-           <div className="flex flex-col items-center justify-center py-10 text-center space-y-8 animate-fade-in w-full">
-             <div className="bg-white p-6 rounded-3xl shadow-xl mb-4 transform hover:scale-105 transition-transform duration-300">
+           <div className="flex flex-col items-center justify-center py-6 text-center space-y-6 animate-fade-in w-full">
+             <div className="bg-white p-6 rounded-3xl shadow-xl mb-2 transform hover:scale-105 transition-transform duration-300">
                 <img 
-                  src="/logo192.png" 
+                  src="/public/logo192.png" 
                   alt="Logo Simulado Detran" 
-                  className="w-32 h-32 object-contain"
+                  className="w-28 h-28 object-contain"
                   onError={(e) => {
-                    // Fallback to emoji if image fails to load
                     e.currentTarget.style.display = 'none';
                     e.currentTarget.parentElement!.innerHTML = '<span class="text-6xl">🚦</span>';
                   }}
@@ -302,12 +332,16 @@ const App: React.FC = () => {
              </div>
              <div>
                <h2 className="text-2xl font-bold text-gray-800 mb-2">Prepare-se para a prova!</h2>
-               <p className="text-gray-600 max-w-xs mx-auto mb-2">
-                 Você terá <strong>40 minutos</strong> para responder <strong>30 questões</strong>.
+               <p className="text-gray-600 max-w-xs mx-auto mb-2 text-sm">
+                 Você terá <strong>40 minutos</strong> para responder <strong>30 questões</strong> sorteadas do banco de 120 perguntas.
                </p>
-               <p className="text-sm text-gray-500">
-                 Acerto mínimo: 70% (21 questões).
-               </p>
+               <div className="flex justify-center gap-2 text-xs text-gray-500 mb-2 flex-wrap max-w-xs mx-auto">
+                  <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded">12 Legislação</span>
+                  <span className="bg-green-100 text-green-800 px-2 py-1 rounded">10 Dir. Defensiva</span>
+                  <span className="bg-red-100 text-red-800 px-2 py-1 rounded">3 Primeiros Socorros</span>
+                  <span className="bg-yellow-100 text-yellow-800 px-2 py-1 rounded">3 Meio Amb.</span>
+                  <span className="bg-gray-200 text-gray-800 px-2 py-1 rounded">2 Mecânica</span>
+               </div>
              </div>
 
              <div className="w-full max-w-xs space-y-3">
@@ -315,7 +349,7 @@ const App: React.FC = () => {
                  onClick={startStandardGame}
                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-xl shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2"
                >
-                 <span>▶️</span> INICIAR PROVA
+                 <span>▶️</span> INICIAR PROVA COMPLETA
                </button>
                
                {process.env.API_KEY && (
@@ -326,6 +360,23 @@ const App: React.FC = () => {
                    <span>✨</span> GERAR COM IA (BETA)
                  </button>
                )}
+               
+               {/* Install Button */}
+               {deferredPrompt && (
+                 <button 
+                   onClick={handleInstallClick}
+                   className="w-full bg-gray-800 hover:bg-gray-900 text-white font-semibold py-3 px-6 rounded-xl shadow transition-transform active:scale-95 flex items-center justify-center gap-2 text-sm"
+                 >
+                   <span>📲</span> INSTALAR APLICATIVO
+                 </button>
+               )}
+
+               {isIOS && !deferredPrompt && (
+                 <div className="text-xs text-gray-500 bg-white p-2 rounded-lg border border-gray-200">
+                   Para instalar no iPhone: Toque em <strong>Compartilhar</strong> e depois em <strong>Adicionar à Tela de Início</strong>.
+                 </div>
+               )}
+
                {aiError && <p className="text-red-500 text-xs mt-2">{aiError}</p>}
              </div>
            </div>
@@ -350,7 +401,6 @@ const App: React.FC = () => {
             />
 
             <div className="w-full max-w-md mt-2 sticky bottom-4 flex gap-3">
-               {/* Back Button */}
                {gameState.currentQuestionIndex > 0 && (
                  <button
                    onClick={handlePreviousQuestion}
@@ -363,10 +413,9 @@ const App: React.FC = () => {
                  </button>
                )}
 
-              {/* Main Action Button */}
               <button
                 onClick={handleNextQuestion}
-                disabled={selectedOption === null && !isReviewMode} // Can click next in review mode even if null (unanswered)
+                disabled={selectedOption === null && !isReviewMode} 
                 className={`flex-[2] py-4 rounded-xl font-bold shadow-lg transition-all flex items-center justify-center gap-2 ${
                   (selectedOption !== null || isReviewMode)
                     ? isReviewMode ? 'bg-yellow-600 hover:bg-yellow-500 text-white' : 'bg-blue-600 text-white hover:bg-blue-500' 
