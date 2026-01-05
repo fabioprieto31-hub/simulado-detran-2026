@@ -9,12 +9,12 @@ const AdSenseBanner: React.FC = () => {
     if (isAdLoaded) return;
 
     const attemptLoad = (retries = 0) => {
-      // Limite de tentativas (aprox 5 segundos)
-      if (retries > 50) return;
+      // Limite de tentativas estendido (aprox 10 segundos)
+      if (retries > 100) return;
 
-      // Verifica se o elemento existe e se tem largura definida no DOM
-      // O erro 'No slot size for availableWidth=0' ocorre quando o script executa em um elemento oculto ou sem layout
-      if (adRef.current && adRef.current.offsetWidth > 0) {
+      // Verifica se o elemento existe e se tem dimensões reais no DOM
+      // AdSense precisa de width > 0 para calcular o tamanho do slot
+      if (adRef.current && adRef.current.offsetWidth > 0 && adRef.current.offsetHeight > 0) {
         try {
           if (typeof window !== 'undefined') {
             const adsbygoogle = (window as any).adsbygoogle || [];
@@ -22,7 +22,10 @@ const AdSenseBanner: React.FC = () => {
             setIsAdLoaded(true);
           }
         } catch (e: any) {
-          console.error("AdSense Error:", e);
+          // Ignora erro específico de slot size para não sujar o console, pois o retry cuidará disso se for temporário
+          if (!e?.message?.includes('No slot size')) {
+             console.error("AdSense Error:", e);
+          }
         }
       } else {
         // Se a largura for 0 (elemento oculto ou não renderizado), tenta novamente em 100ms
@@ -30,8 +33,11 @@ const AdSenseBanner: React.FC = () => {
       }
     };
 
-    // Inicia a tentativa de carregamento com pequeno delay inicial
-    const timer = setTimeout(() => attemptLoad(), 100);
+    // Inicia a tentativa de carregamento com delay inicial para garantir renderização do layout pai
+    const timer = setTimeout(() => {
+       // Usa requestAnimationFrame para garantir que o paint do navegador ocorreu
+       window.requestAnimationFrame(() => attemptLoad());
+    }, 200);
 
     return () => clearTimeout(timer);
   }, [isAdLoaded]);
@@ -44,7 +50,7 @@ const AdSenseBanner: React.FC = () => {
       <ins 
            ref={adRef}
            className="adsbygoogle relative z-10 block"
-           style={{ display: 'block', width: '100%' }}
+           style={{ display: 'block', width: '100%', minHeight: '100px' }}
            data-ad-client="ca-pub-2568819987093254"
            data-ad-slot="9517743775"
            data-ad-format="auto"
