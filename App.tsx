@@ -1,11 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { App as CapacitorApp } from '@capacitor/app';
 import { STATIC_QUESTIONS } from './constants';
 import { Question, QuizState } from './types';
 import QuestionCard from './components/QuestionCard';
 import AdModal from './components/AdModal';
 import ResultScreen from './components/ResultScreen';
 import Footer from './components/Footer';
+import AdSenseBanner from './components/AdSenseBanner'; // Importando novo componente
 import { generateQuestions } from './services/geminiService';
+import { initializeAdMob, showRewardedInterstitial } from './services/admobService';
 
 // Show ad every X questions
 const AD_FREQUENCY = 5;
@@ -26,13 +30,46 @@ const App: React.FC = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isIOS, setIsIOS] = useState(false);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
+  const [isLoadingAd, setIsLoadingAd] = useState(false);
 
-  // Check for PWA installability and Platform
+  // Initialize AdMob, PWA checks and Back Button Handler
   useEffect(() => {
+    initializeAdMob();
+
+    // Lógica do botão Voltar (Android)
+    if (Capacitor.isNativePlatform()) {
+      CapacitorApp.addListener('backButton', ({ canGoBack }) => {
+        setGameState(currentState => {
+            if (currentState.status === 'IDLE') {
+                CapacitorApp.exitApp();
+                return currentState;
+            }
+            
+            if (currentState.status === 'PLAYING') {
+                if (window.confirm("Deseja sair do simulado? Seu progresso será perdido.")) {
+                    return {
+                        status: 'IDLE',
+                        currentQuestionIndex: 0,
+                        answers: [],
+                        shuffledQuestions: []
+                    };
+                }
+                return currentState;
+            }
+            
+            return {
+                status: 'IDLE',
+                currentQuestionIndex: 0,
+                answers: [],
+                shuffledQuestions: []
+            };
+        });
+      });
+    }
+
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      // Show banner automatically when browser says app is installable
       if (!localStorage.getItem('installBannerDismissed')) {
         setShowInstallBanner(true);
       }
@@ -40,11 +77,9 @@ const App: React.FC = () => {
 
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     
-    // Simple iOS detection
     const isIosDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
     setIsIOS(isIosDevice);
     
-    // For iOS, show banner if not in standalone mode
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
     if (isIosDevice && !isStandalone && !localStorage.getItem('installBannerDismissed')) {
       setShowInstallBanner(true);
@@ -52,6 +87,9 @@ const App: React.FC = () => {
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      if (Capacitor.isNativePlatform()) {
+        CapacitorApp.removeAllListeners();
+      }
     };
   }, []);
 
@@ -63,7 +101,6 @@ const App: React.FC = () => {
       timer = setInterval(() => {
         setTimeLeft((prev) => {
           if (prev <= 1) {
-            // Time expired
             clearInterval(timer);
             setGameState(curr => ({ ...curr, status: 'FINISHED' }));
             return 0;
@@ -78,7 +115,26 @@ const App: React.FC = () => {
     };
   }, [gameState.status]);
 
-  // Format seconds to MM:SS
+  // ADMOB LOGIC
+  useEffect(() => {
+    if (gameState.status === 'PAUSED_FOR_AD') {
+      if (Capacitor.isNativePlatform()) {
+        setIsLoadingAd(true);
+        showRewardedInterstitial(
+          () => {
+            setIsLoadingAd(false);
+            handleAdClosed();
+          },
+          () => {
+            console.log('Erro no AdMob, tentando seguir...');
+            setIsLoadingAd(false);
+            handleAdClosed(); 
+          }
+        );
+      }
+    }
+  }, [gameState.status]);
+
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
@@ -101,11 +157,9 @@ const App: React.FC = () => {
     localStorage.setItem('installBannerDismissed', 'true');
   };
 
-  // Logic to generate a weighted exam structure (Official Detran Mix)
   const getWeightedQuestions = useCallback(() => {
     const shuffle = (array: Question[]) => [...array].sort(() => Math.random() - 0.5);
 
-    // Filter by categories
     const pools = {
       legislation: STATIC_QUESTIONS.filter(q => ['Legislação', 'Sinalização', 'Infrações'].includes(q.category || '')),
       defensive: STATIC_QUESTIONS.filter(q => q.category === 'Direção Defensiva'),
@@ -114,8 +168,6 @@ const App: React.FC = () => {
       environment: STATIC_QUESTIONS.filter(q => ['Meio Ambiente', 'Cidadania'].includes(q.category || ''))
     };
 
-    // Select specific amounts to total 30 questions
-    // Legislação: 12, Direção Defensiva: 10, Primeiros Socorros: 3, Meio Ambiente: 3, Mecânica: 2
     const selected = [
       ...shuffle(pools.legislation).slice(0, 12),
       ...shuffle(pools.defensive).slice(0, 10),
@@ -124,11 +176,9 @@ const App: React.FC = () => {
       ...shuffle(pools.mechanics).slice(0, 2)
     ];
 
-    // Final shuffle of the selected 30
     return shuffle(selected);
   }, []);
 
-  // Initialize Standard Game
   const startStandardGame = useCallback(() => {
     const shuffled = getWeightedQuestions();
 
@@ -143,7 +193,6 @@ const App: React.FC = () => {
     setTimeLeft(GAME_DURATION); 
   }, [getWeightedQuestions]);
 
-  // Initialize AI Game
   const startAiGame = async () => {
     setGameState(prev => ({ ...prev, status: 'LOADING_AI' }));
     setAiError(null);
@@ -338,7 +387,7 @@ const App: React.FC = () => {
            <div className="flex flex-col items-center justify-center py-6 text-center space-y-6 animate-fade-in w-full">
              <div className="bg-white p-6 rounded-3xl shadow-xl mb-2 transform hover:scale-105 transition-transform duration-300">
                 <img 
-                  src="/public/logo192.png" 
+                  src="/logo192.png" 
                   alt="Logo Simulado Detran" 
                   className="w-28 h-28 object-contain"
                   onError={(e) => {
@@ -380,6 +429,14 @@ const App: React.FC = () => {
                
                {aiError && <p className="text-red-500 text-xs mt-2">{aiError}</p>}
              </div>
+
+             {/* AdSense Banner no rodapé da Home (apenas Web) */}
+             {!Capacitor.isNativePlatform() && (
+                <div className="w-full mt-6">
+                    <p className="text-xs text-gray-400 mb-1 uppercase tracking-widest">Publicidade</p>
+                    <AdSenseBanner />
+                </div>
+             )}
            </div>
         )}
 
@@ -431,19 +488,43 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* AD OVERLAY */}
+        {/* AD OVERLAY LOGIC */}
         {gameState.status === 'PAUSED_FOR_AD' && (
-          <AdModal onClose={handleAdClosed} />
+          <>
+            {/* Se for nativo, mostra um loading no fundo enquanto o AdMob abre */}
+            {Capacitor.isNativePlatform() && isLoadingAd && (
+               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90">
+                 <div className="text-white flex flex-col items-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mb-2"></div>
+                    <p>Carregando Publicidade...</p>
+                 </div>
+               </div>
+            )}
+            
+            {/* Se for Web (ou seja, NÃO nativo), usa o modal com AdSense */}
+            {!Capacitor.isNativePlatform() && (
+              <AdModal onClose={handleAdClosed} />
+            )}
+          </>
         )}
 
         {/* RESULT SCREEN */}
         {gameState.status === 'FINISHED' && (
-          <ResultScreen 
-            state={gameState} 
-            onRestart={handleRestart} 
-            onReview={handleReview}
-            totalQuestions={gameState.shuffledQuestions.length}
-          />
+          <div className="w-full flex flex-col items-center">
+            <ResultScreen 
+                state={gameState} 
+                onRestart={handleRestart} 
+                onReview={handleReview}
+                totalQuestions={gameState.shuffledQuestions.length}
+            />
+            {/* AdSense Banner na tela de resultado (apenas Web) */}
+            {!Capacitor.isNativePlatform() && (
+                <div className="w-full max-w-md mt-6">
+                    <p className="text-xs text-center text-gray-400 mb-1 uppercase tracking-widest">Publicidade</p>
+                    <AdSenseBanner />
+                </div>
+            )}
+          </div>
         )}
       </main>
 
