@@ -1,20 +1,16 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
-  resolve: {
-    alias: {
-      '@': path.resolve('src'),
-    },
-  },
+  // Removido o bloco resolve.alias pois os arquivos estão na raiz e não em uma pasta src/
   build: {
     outDir: 'dist',
     emptyOutDir: true,
   },
-  // Isso previne que o app feche sozinho no Android ao tentar acessar process.env
   define: {
-    'process.env': {}
+    // Garante que o process.env exista vazia para evitar crash em libs, 
+    // mas idealmente a API Key deve ser injetada pelo ambiente de build
+    'process.env': {} 
   }
 });
