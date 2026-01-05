@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
   <head>
@@ -11,9 +12,13 @@
 
     <!-- PWA e Ícones -->
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
-    <link rel="apple-touch-icon" sizes="192x192" href="/logo192.png" />
+    <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/logo192.png" />
     <link rel="manifest" href="/manifest.json" />
     <meta name="theme-color" content="#1d4ed8" />
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Detran 2026">
 
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -51,7 +56,6 @@
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
     <script>
-      // Service Worker apenas se suportado
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js').catch(err => console.log('SW erro:', err));
