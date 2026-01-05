@@ -7,9 +7,8 @@ import QuestionCard from './components/QuestionCard';
 import AdModal from './components/AdModal';
 import ResultScreen from './components/ResultScreen';
 import Footer from './components/Footer';
-import AdSenseBanner from './components/AdSenseBanner'; // Importando novo componente
+import AdSenseBanner from './components/AdSenseBanner'; 
 import { generateQuestions } from './services/geminiService';
-import { initializeAdMob, showRewardedInterstitial } from './services/admobService';
 
 // Show ad every X questions
 const AD_FREQUENCY = 5;
@@ -30,12 +29,9 @@ const App: React.FC = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isIOS, setIsIOS] = useState(false);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
-  const [isLoadingAd, setIsLoadingAd] = useState(false);
 
-  // Initialize AdMob, PWA checks and Back Button Handler
+  // Initialize PWA checks and Back Button Handler
   useEffect(() => {
-    initializeAdMob();
-
     // Lógica do botão Voltar (Android)
     if (Capacitor.isNativePlatform()) {
       CapacitorApp.addListener('backButton', ({ canGoBack }) => {
@@ -113,26 +109,6 @@ const App: React.FC = () => {
     return () => {
       if (timer) clearInterval(timer);
     };
-  }, [gameState.status]);
-
-  // ADMOB LOGIC
-  useEffect(() => {
-    if (gameState.status === 'PAUSED_FOR_AD') {
-      if (Capacitor.isNativePlatform()) {
-        setIsLoadingAd(true);
-        showRewardedInterstitial(
-          () => {
-            setIsLoadingAd(false);
-            handleAdClosed();
-          },
-          () => {
-            console.log('Erro no AdMob, tentando seguir...');
-            setIsLoadingAd(false);
-            handleAdClosed(); 
-          }
-        );
-      }
-    }
   }, [gameState.status]);
 
   const formatTime = (seconds: number) => {
@@ -430,13 +406,11 @@ const App: React.FC = () => {
                {aiError && <p className="text-red-500 text-xs mt-2">{aiError}</p>}
              </div>
 
-             {/* AdSense Banner no rodapé da Home (apenas Web) */}
-             {!Capacitor.isNativePlatform() && (
-                <div className="w-full mt-6">
-                    <p className="text-xs text-gray-400 mb-1 uppercase tracking-widest">Publicidade</p>
-                    <AdSenseBanner />
-                </div>
-             )}
+             {/* AdSense Banner no rodapé da Home (Visível em TODAS as plataformas) */}
+             <div className="w-full mt-6">
+                 <p className="text-xs text-gray-400 mb-1 uppercase tracking-widest">Publicidade</p>
+                 <AdSenseBanner />
+             </div>
            </div>
         )}
 
@@ -488,24 +462,9 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* AD OVERLAY LOGIC */}
+        {/* AD OVERLAY LOGIC (AdSense Web Modal) */}
         {gameState.status === 'PAUSED_FOR_AD' && (
-          <>
-            {/* Se for nativo, mostra um loading no fundo enquanto o AdMob abre */}
-            {Capacitor.isNativePlatform() && isLoadingAd && (
-               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-90">
-                 <div className="text-white flex flex-col items-center">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mb-2"></div>
-                    <p>Carregando Publicidade...</p>
-                 </div>
-               </div>
-            )}
-            
-            {/* Se for Web (ou seja, NÃO nativo), usa o modal com AdSense */}
-            {!Capacitor.isNativePlatform() && (
-              <AdModal onClose={handleAdClosed} />
-            )}
-          </>
+           <AdModal onClose={handleAdClosed} />
         )}
 
         {/* RESULT SCREEN */}
@@ -517,13 +476,11 @@ const App: React.FC = () => {
                 onReview={handleReview}
                 totalQuestions={gameState.shuffledQuestions.length}
             />
-            {/* AdSense Banner na tela de resultado (apenas Web) */}
-            {!Capacitor.isNativePlatform() && (
-                <div className="w-full max-w-md mt-6">
-                    <p className="text-xs text-center text-gray-400 mb-1 uppercase tracking-widest">Publicidade</p>
-                    <AdSenseBanner />
-                </div>
-            )}
+            {/* AdSense Banner na tela de resultado (Visível em TODAS as plataformas) */}
+            <div className="w-full max-w-md mt-6">
+                <p className="text-xs text-center text-gray-400 mb-1 uppercase tracking-widest">Publicidade</p>
+                <AdSenseBanner />
+            </div>
           </div>
         )}
       </main>
