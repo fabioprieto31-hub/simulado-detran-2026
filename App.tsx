@@ -185,7 +185,8 @@ const App: React.FC = () => {
       setSelectedOption(null);
       setTimeLeft(GAME_DURATION); 
     } catch (err) {
-      setAiError("Não foi possível gerar questões com IA. Verifique sua chave API ou tente novamente.");
+      // Fix: Generic error message to comply with guidelines regarding API key management UI
+      setAiError("Não foi possível gerar questões com IA no momento. Tente novamente mais tarde.");
       setGameState(prev => ({ ...prev, status: 'IDLE' }));
     }
   };
