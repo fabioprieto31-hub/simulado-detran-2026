@@ -1,12 +1,12 @@
-const CACHE_NAME = 'detran-sim-v2';
+
+const CACHE_NAME = 'detran-sim-v4';
 const ASSETS = [
   '/',
   '/index.html',
-  '/index.tsx',
-  '/public/manifest.json',
-  '/public/favicon.ico',
-  '/public/logo192.png',
-  '/public/logo512.png'
+  '/manifest.json',
+  '/favicon.ico',
+  '/logo192.png',
+  '/logo512.png'
 ];
 
 self.addEventListener('install', (e) => {
@@ -28,7 +28,8 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
-  // Estratégia: Cache First, falling back to Network, then Cache
+  if (!e.request.url.startsWith(self.location.origin)) return;
+
   e.respondWith(
     caches.match(e.request).then((cachedResponse) => {
       if (cachedResponse) {
@@ -36,12 +37,10 @@ self.addEventListener('fetch', (e) => {
       }
 
       return fetch(e.request).then((networkResponse) => {
-        // Verifica se a resposta é válida antes de cachear
         if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
           return networkResponse;
         }
 
-        // Clona a resposta para salvar no cache para uso futuro (offline)
         const responseToCache = networkResponse.clone();
         caches.open(CACHE_NAME).then((cache) => {
           cache.put(e.request, responseToCache);
@@ -49,7 +48,7 @@ self.addEventListener('fetch', (e) => {
 
         return networkResponse;
       }).catch(() => {
-        // Fallback opcional se offline e sem cache (pode retornar uma página offline customizada aqui)
+        // Fallback
       });
     })
   );
