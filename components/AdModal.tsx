@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import AdSenseBanner from './AdSenseBanner';
+import AdsterraBanner from './AdsterraBanner';
 
 interface AdModalProps {
   onClose: () => void;
@@ -26,33 +26,35 @@ const AdModal: React.FC<AdModalProps> = ({ onClose }) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-95 p-4">
-      <div className="w-full max-w-sm bg-gray-900 rounded-lg text-white flex flex-col items-center relative overflow-hidden">
+      <div className="w-full max-w-sm bg-gray-900 rounded-3xl text-white flex flex-col items-center relative overflow-hidden shadow-2xl border border-gray-800">
         
-        <div className="w-full p-2 bg-gray-800 flex justify-between items-center">
-            <span className="text-xs text-gray-400 font-bold uppercase tracking-wider">Publicidade</span>
+        <div className="w-full p-4 bg-gray-800 flex justify-between items-center border-b border-gray-700">
+            <span className="text-xs text-yellow-500 font-black uppercase tracking-widest">Anúncio de Recompensa</span>
             {canClose && (
-                <button onClick={onClose} className="text-gray-400 hover:text-white">
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"></path></svg>
                 </button>
             )}
         </div>
 
-        <div className="w-full bg-white p-1 min-h-[250px] flex items-center justify-center">
-             {/* Exibe o anúncio AdSense aqui */}
-             <AdSenseBanner />
+        <div className="w-full bg-white flex items-center justify-center py-6">
+             <AdsterraBanner />
         </div>
         
-        <div className="p-4 w-full">
+        <div className="p-6 w-full bg-gray-900">
+            <p className="text-center text-gray-400 text-xs mb-4 px-4 leading-snug">
+              Apoie nosso app assistindo este anúncio para continuar o simulado gratuitamente.
+            </p>
             <button
             onClick={onClose}
             disabled={!canClose}
-            className={`w-full py-3 rounded-lg font-bold transition-all ${
+            className={`w-full py-4 rounded-2xl font-black transition-all transform active:scale-95 ${
                 canClose
                 ? 'bg-blue-600 hover:bg-blue-500 text-white cursor-pointer shadow-lg'
-                : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                : 'bg-gray-800 text-gray-600 cursor-not-allowed border border-gray-700'
             }`}
             >
-            {canClose ? 'FECHAR ANÚNCIO' : `FECHAR EM ${timeLeft}s`}
+            {canClose ? 'CONTINUAR SIMULADO' : `FECHAR EM ${timeLeft}s`}
             </button>
         </div>
       </div>
