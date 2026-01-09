@@ -5,18 +5,18 @@
   "description": "Prepare-se para a prova do Detran 2026 com simulados atualizados e IA.",
   "icons": [
     {
-      "src": "/favicon.ico",
+      "src": "/public/favicon.ico",
       "sizes": "192x192 64x64 32x32 24x24 16x16",
       "type": "image/x-icon"
     },
     {
-      "src": "/logo192.png",
+      "src": "/public/logo192.png",
       "type": "image/png",
       "sizes": "192x192",
       "purpose": "any"
     },
     {
-      "src": "/logo192.png",
+      "src": "/public/logo192.png",
       "type": "image/png",
       "sizes": "192x192",
       "purpose": "maskable"
